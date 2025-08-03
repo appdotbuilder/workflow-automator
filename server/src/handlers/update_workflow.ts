@@ -1,21 +1,58 @@
 
+import { db } from '../db';
+import { workflowsTable } from '../db/schema';
 import { type UpdateWorkflowInput, type Workflow } from '../schema';
+import { eq, and } from 'drizzle-orm';
 
 export async function updateWorkflow(input: UpdateWorkflowInput, userId: number): Promise<Workflow> {
-    // This is a placeholder declaration! Real code should be implemented here.
-    // The goal of this handler is:
-    // 1. Verify that workflow belongs to the authenticated user
-    // 2. Update only the provided fields in the database
-    // 3. Update the updated_at timestamp
-    // 4. Return the updated workflow
-    // 5. Throw error if workflow not found or doesn't belong to user
-    return Promise.resolve({
-        id: input.id,
-        user_id: userId,
-        name: input.name || "placeholder",
-        description: input.description || null,
-        is_active: input.is_active ?? true,
-        created_at: new Date(),
-        updated_at: new Date()
-    } as Workflow);
+  try {
+    // First, verify the workflow exists and belongs to the user
+    const existingWorkflow = await db.select()
+      .from(workflowsTable)
+      .where(and(
+        eq(workflowsTable.id, input.id),
+        eq(workflowsTable.user_id, userId)
+      ))
+      .execute();
+
+    if (existingWorkflow.length === 0) {
+      throw new Error('Workflow not found or does not belong to user');
+    }
+
+    // Build update object with only provided fields
+    const updateData: any = {
+      updated_at: new Date()
+    };
+
+    if (input.name !== undefined) {
+      updateData.name = input.name;
+    }
+
+    if (input.description !== undefined) {
+      updateData.description = input.description;
+    }
+
+    if (input.is_active !== undefined) {
+      updateData.is_active = input.is_active;
+    }
+
+    // Perform the update
+    const result = await db.update(workflowsTable)
+      .set(updateData)
+      .where(and(
+        eq(workflowsTable.id, input.id),
+        eq(workflowsTable.user_id, userId)
+      ))
+      .returning()
+      .execute();
+
+    if (result.length === 0) {
+      throw new Error('Failed to update workflow');
+    }
+
+    return result[0];
+  } catch (error) {
+    console.error('Workflow update failed:', error);
+    throw error;
+  }
 }

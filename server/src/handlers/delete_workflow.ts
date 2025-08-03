@@ -1,10 +1,28 @@
 
+import { db } from '../db';
+import { workflowsTable } from '../db/schema';
+import { eq, and } from 'drizzle-orm';
+
 export async function deleteWorkflow(workflowId: number, userId: number): Promise<{ success: boolean }> {
-    // This is a placeholder declaration! Real code should be implemented here.
-    // The goal of this handler is:
-    // 1. Verify that workflow belongs to the authenticated user
-    // 2. Delete the workflow and all associated steps/executions (cascade delete)
-    // 3. Return success status
-    // 4. Throw error if workflow not found or doesn't belong to user
-    return Promise.resolve({ success: true });
+  try {
+    // Delete the workflow, but only if it belongs to the authenticated user
+    // Using cascade delete defined in schema to handle related records
+    const result = await db.delete(workflowsTable)
+      .where(and(
+        eq(workflowsTable.id, workflowId),
+        eq(workflowsTable.user_id, userId)
+      ))
+      .returning()
+      .execute();
+
+    // If no rows were affected, workflow either doesn't exist or doesn't belong to user
+    if (result.length === 0) {
+      throw new Error('Workflow not found or access denied');
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error('Workflow deletion failed:', error);
+    throw error;
+  }
 }

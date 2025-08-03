@@ -1,27 +1,48 @@
 
+import { db } from '../db';
+import { workflowExecutionsTable, stepExecutionsTable, workflowStepsTable, workflowsTable } from '../db/schema';
 import { type WorkflowExecution, type StepExecution } from '../schema';
+import { eq, and, asc } from 'drizzle-orm';
 
 export async function getExecutionDetails(executionId: number, userId: number): Promise<{
     execution: WorkflowExecution;
     stepExecutions: StepExecution[];
 }> {
-    // This is a placeholder declaration! Real code should be implemented here.
-    // The goal of this handler is:
-    // 1. Verify that execution's workflow belongs to the authenticated user
-    // 2. Fetch execution details along with all step executions
-    // 3. Order step executions by step_order for proper display
-    // 4. Return detailed execution information
-    // 5. Throw error if execution not found or doesn't belong to user's workflow
-    return Promise.resolve({
-        execution: {
-            id: executionId,
-            workflow_id: 1,
-            status: 'completed',
-            started_at: new Date(),
-            completed_at: new Date(),
-            error_message: null,
-            created_at: new Date()
-        } as WorkflowExecution,
-        stepExecutions: [] as StepExecution[]
-    });
+    try {
+        // First, verify that the execution exists and belongs to the user's workflow
+        const executionResult = await db.select()
+            .from(workflowExecutionsTable)
+            .innerJoin(workflowsTable, eq(workflowExecutionsTable.workflow_id, workflowsTable.id))
+            .where(
+                and(
+                    eq(workflowExecutionsTable.id, executionId),
+                    eq(workflowsTable.user_id, userId)
+                )
+            )
+            .execute();
+
+        if (executionResult.length === 0) {
+            throw new Error('Execution not found or does not belong to user');
+        }
+
+        const execution = executionResult[0].workflow_executions;
+
+        // Fetch all step executions for this execution, ordered by step_order
+        const stepExecutionsResult = await db.select()
+            .from(stepExecutionsTable)
+            .innerJoin(workflowStepsTable, eq(stepExecutionsTable.step_id, workflowStepsTable.id))
+            .where(eq(stepExecutionsTable.execution_id, executionId))
+            .orderBy(asc(workflowStepsTable.step_order))
+            .execute();
+
+        const stepExecutions = stepExecutionsResult.map(result => result.step_executions);
+
+        return {
+            execution,
+            stepExecutions
+        };
+    } catch (error) {
+        console.error('Get execution details failed:', error);
+        throw error;
+    }
 }

@@ -1,23 +1,49 @@
 
+import { db } from '../db';
+import { workflowsTable, workflowStepsTable } from '../db/schema';
 import { type CreateWorkflowStepInput, type WorkflowStep } from '../schema';
+import { eq } from 'drizzle-orm';
 
 export async function createWorkflowStep(input: CreateWorkflowStepInput, userId: number): Promise<WorkflowStep> {
-    // This is a placeholder declaration! Real code should be implemented here.
-    // The goal of this handler is:
-    // 1. Verify that workflow belongs to the authenticated user
-    // 2. Create a new workflow step in the database
-    // 3. Handle JSON serialization for headers if provided
-    // 4. Return the created step with generated ID and timestamps
-    // 5. Throw error if workflow not found or doesn't belong to user
-    return Promise.resolve({
-        id: 1, // Placeholder ID
+  try {
+    // First verify that the workflow exists and belongs to the authenticated user
+    const workflows = await db.select()
+      .from(workflowsTable)
+      .where(eq(workflowsTable.id, input.workflow_id))
+      .execute();
+
+    if (workflows.length === 0) {
+      throw new Error('Workflow not found');
+    }
+
+    const workflow = workflows[0];
+    if (workflow.user_id !== userId) {
+      throw new Error('Workflow does not belong to the authenticated user');
+    }
+
+    // Create the workflow step
+    const result = await db.insert(workflowStepsTable)
+      .values({
         workflow_id: input.workflow_id,
         name: input.name,
         method: input.method,
         url: input.url,
         headers: input.headers || null,
         body: input.body || null,
-        step_order: input.step_order,
-        created_at: new Date()
-    } as WorkflowStep);
+        step_order: input.step_order
+      })
+      .returning()
+      .execute();
+
+    const step = result[0];
+    
+    // Return with properly typed headers
+    return {
+      ...step,
+      headers: step.headers as Record<string, string> | null
+    };
+  } catch (error) {
+    console.error('Workflow step creation failed:', error);
+    throw error;
+  }
 }
